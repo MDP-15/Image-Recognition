@@ -7,14 +7,16 @@ import time
 from pathlib import Path
 from threading import Thread
 
-import cv2
 import numpy as np
-import torch
-from PIL import Image, ExifTags
-from torch.utils.data import Dataset
+from PIL import ExifTags, Image
 from tqdm import tqdm
 
-from utils.general import xyxy2xywh, xywh2xyxy, torch_distributed_zero_first
+import cv2
+import torch
+from picamera import PiCamera
+from picamera.array import PiRGBArray
+from torch.utils.data import Dataset
+from utils.general import torch_distributed_zero_first, xywh2xyxy, xyxy2xywh
 
 help_url = 'https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data'
 img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.dng']
@@ -269,13 +271,15 @@ class LoadStreams:  # multiple IP or RTSP cameras
         for i, s in enumerate(sources):
             # Start the thread to read frames from the video stream
             print('%g/%g: %s... ' % (i + 1, n, s), end='')
-            cap = cv2.VideoCapture(eval(s) if s.isnumeric() else s)
-            assert cap.isOpened(), 'Failed to open %s' % s
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = cap.get(cv2.CAP_PROP_FPS) % 100
-            _, self.imgs[i] = cap.read()  # guarantee first frame
-            thread = Thread(target=self.update, args=([i, cap]), daemon=True)
+            camera = PiCamera()
+            rawCapture = PiRGBArray(camera)
+            assert not camera.closed, 'Failed to open %s' % s
+            w = camera.resolution[0]
+            h = camera.resolution[1]
+            fps = camera.framerate % 100
+            camera.capture(rawCapture, format="bgr")
+            _, self.imgs[i] = rawCapture.array # guarantee first frame
+            thread = Thread(target=self.update, args=([i, camera, rawCapture]), daemon=True)
             print(' success (%gx%g at %.2f FPS).' % (w, h, fps))
             thread.start()
         print('')  # newline
@@ -286,15 +290,15 @@ class LoadStreams:  # multiple IP or RTSP cameras
         if not self.rect:
             print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
 
-    def update(self, index, cap):
+    def update(self, index, camera, rawCapture):
         # Read next stream frame in a daemon thread
         n = 0
-        while cap.isOpened():
+        while not camera.closed:
             n += 1
             # _, self.imgs[index] = cap.read()
-            cap.grab()
             if n == 4:  # read every 4th frame
-                _, self.imgs[index] = cap.retrieve()
+                camera.capture(rawCapture, format="bgr")
+                _, self.imgs[index] = rawCapture.array
                 n = 0
             time.sleep(0.01)  # wait time
 

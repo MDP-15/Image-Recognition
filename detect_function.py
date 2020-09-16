@@ -32,11 +32,11 @@ def detect(weights='mdp/weights/weights.pt',
            augment=False,
            update=False):
 
-    predicted_label = None
     out, imgsz = output, img_size
     webcam = source.isnumeric() or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # Initialize
+    save_img = True
     set_logging()
     device = select_device(device)
     if os.path.exists(out):
@@ -159,5 +159,3 @@ def detect(weights='mdp/weights/weights.pt',
             os.system('open ' + save_path)
 
     print('Done. (%.3fs)' % (time.time() - t0))
-
-    return predicted_label
