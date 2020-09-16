@@ -32,6 +32,7 @@ def detect(weights='mdp/weights/weights.pt',
            augment=False,
            update=False):
 
+    save_img = True
     predicted_label = None
     out, imgsz = output, img_size
     webcam = source.isnumeric() or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
@@ -117,6 +118,7 @@ def detect(weights='mdp/weights/weights.pt',
                 # Write results
                 for *xyxy, conf, cls in det:
                     predicted_label = names[int(cls)]
+                    print(predicted_label)
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         with open(txt_path + '.txt', 'a') as f:
@@ -139,7 +141,7 @@ def detect(weights='mdp/weights/weights.pt',
             # Save results (image with detections)
             if save_img:
                 if dataset.mode == 'images':
-                    cv2.imwrite(save_path, im0)
+                    # cv2.imwrite(save_path, im0)
                 else:
                     if vid_path != save_path:  # new video
                         vid_path = save_path
@@ -161,3 +163,4 @@ def detect(weights='mdp/weights/weights.pt',
     print('Done. (%.3fs)' % (time.time() - t0))
 
     return predicted_label
+detect(source='0')
