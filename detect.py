@@ -1,25 +1,25 @@
 import argparse
 import os
+import pickle
 import platform
 import shutil
+import socket
+import struct
 import time
 from pathlib import Path
+
 import numpy as np
+from numpy import random
 
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-from numpy import random
-
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages, letterbox
-from utils.general import (
-    check_img_size, non_max_suppression, apply_classifier, scale_coords,
-    xyxy2xywh, plot_one_box, strip_optimizer, set_logging)
-from utils.torch_utils import select_device, load_classifier, time_synchronized
-import socket
-import pickle
-import struct
+from utils.datasets import LoadImages, LoadStreams, letterbox
+from utils.general import (apply_classifier, check_img_size,
+                           non_max_suppression, plot_one_box, scale_coords,
+                           set_logging, strip_optimizer, xyxy2xywh)
+from utils.torch_utils import load_classifier, select_device, time_synchronized
 
 
 def receive_frame(data, payload_size, conn):
@@ -61,18 +61,22 @@ def detect(weights='mdp/weights/weights.pt',
     names = model.module.names if hasattr(model, 'module') else model.names
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
-    HOST = ''
-    PORT = 8485
+    # HOST = ''
+    # PORT = 8485
 
-    s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    print('Socket created')
+    # s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    # print('Socket created')
+    #
+    # s.bind((HOST, PORT))
+    # print('Socket bind complete')
+    # s.listen(10)
+    # print('Socket now listening')
 
-    s.bind((HOST, PORT))
-    print('Socket bind complete')
-    s.listen(10)
-    print('Socket now listening')
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect(('192.168.15.1', 9000))
+    conn = client_socket
 
-    conn, addr = s.accept()
+    # conn, addr = s.accept()
 
     data = b""
     payload_size = struct.calcsize(">L")
@@ -135,7 +139,7 @@ def detect(weights='mdp/weights/weights.pt',
                 # Write results
                 for *xyxy, conf, cls in det:
                     predicted_label = names[int(cls)]
-                    # print(predicted_label)
+                    conn.sendall(predicted_label.encode())  # send result to rpi
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                     print(('%s ' * 5 + '\n') % (predicted_label, *xywh))  # label format
 
@@ -147,4 +151,6 @@ def detect(weights='mdp/weights/weights.pt',
                 raise StopIteration
         # time.sleep(0.1)
 
-detect()
+
+if __name__ == '__main__':
+    detect()
