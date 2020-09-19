@@ -22,6 +22,25 @@ from utils.general import (apply_classifier, check_img_size,
 from utils.torch_utils import load_classifier, select_device, time_synchronized
 
 
+label_id_mapping = {
+    'up': '1',
+    'down': '2',
+    'right': '3',
+    'left': '4',
+    'go': '5',
+    '6': '6',
+    '7': '7',
+    '8': '8',
+    '9': '9',
+    '0': '10',
+    'v': '11',
+    'w': '12',
+    'x': '13',
+    'y': '14',
+    'z': '15'
+}
+
+
 def receive_frame(data, payload_size, conn):
     while len(data) < payload_size:
         print("Recv: {}".format(len(data)))
@@ -40,6 +59,13 @@ def receive_frame(data, payload_size, conn):
     frame = pickle.loads(frame_data, fix_imports=True, encoding="bytes")
     frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
     return frame, data
+
+
+# need to confirm on communication protocol later
+def convert_to_message(label):
+    prefix = ''
+    label = prefix + label
+    return label.encode()
 
 
 def detect(weights='mdp/weights/weights.pt',
@@ -139,11 +165,15 @@ def detect(weights='mdp/weights/weights.pt',
                 # Write results
                 for *xyxy, conf, cls in det:
                     predicted_label = names[int(cls)]
-                    conn.sendall(predicted_label.encode())  # send result to rpi
-                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    print(('%s ' * 5 + '\n') % (predicted_label, *xywh))  # label format
+                    label_id = label_id_mapping.get(predicted_label)
 
-                    label = '%s %.2f' % (predicted_label, conf)
+                    rpi_message = convert_to_message(label_id)
+
+                    conn.sendall(rpi_message)  # send result to rpi
+                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                    print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
+
+                    label = '%s %.2f' % (label_id, conf)
                     plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
                     break
             cv2.imshow('ImageWindow', im0)
