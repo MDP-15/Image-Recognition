@@ -41,26 +41,6 @@ label_id_mapping = {
 }
 
 
-def receive_frame(data, payload_size, conn):
-    while len(data) < payload_size:
-        print("Recv: {}".format(len(data)))
-        data += conn.recv(4096)
-
-    print("Done Recv: {}".format(len(data)))
-    packed_msg_size = data[:payload_size]
-    data = data[payload_size:]
-    msg_size = struct.unpack(">L", packed_msg_size)[0]
-    print("msg_size: {}".format(msg_size))
-    while len(data) < msg_size:
-        data += conn.recv(4096)
-    frame_data = data[:msg_size]
-    data = data[msg_size:]
-
-    frame = pickle.loads(frame_data, fix_imports=True, encoding="bytes")
-    frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
-    return frame, data
-
-
 # need to confirm on communication protocol later
 def convert_to_message(label):
     prefix = ''
@@ -87,39 +67,18 @@ def detect(weights='mdp/weights/weights.pt',
     names = model.module.names if hasattr(model, 'module') else model.names
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
-    # HOST = ''
-    # PORT = 8485
-
-    # s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    # print('Socket created')
-    #
-    # s.bind((HOST, PORT))
-    # print('Socket bind complete')
-    # s.listen(10)
-    # print('Socket now listening')
-
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('192.168.15.1', 9000))
-    conn = client_socket
-
-    # conn, addr = s.accept()
-
-    data = b""
-    payload_size = struct.calcsize(">L")
-    print("payload_size: {}".format(payload_size))
-
     # Run inference
     t0 = time.time()
     img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
 
-    frame, data = receive_frame(data, payload_size, conn)
-    img = [frame]
-
     s = np.stack([letterbox(x, new_shape=img_size)[0].shape for x in img], 0)  # inference shapes
     rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
 
+    #open stream connection via http
+    cap = cv2.VideoCapture('http:/192.168.15.1:8000/stream.mjpg')
+
     while True:
-        frame, data = receive_frame(data, payload_size, conn)
+        ret, frame = cap.read()
 
         img = [frame]
         img0 = img.copy()
@@ -169,7 +128,7 @@ def detect(weights='mdp/weights/weights.pt',
 
                     rpi_message = convert_to_message(label_id)
 
-                    conn.sendall(rpi_message)  # send result to rpi
+                    #conn.sendall(rpi_message)  # send result to rpi
                     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                     print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
 
