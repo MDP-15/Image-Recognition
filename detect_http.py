@@ -9,6 +9,7 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
+import requests
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
@@ -18,31 +19,80 @@ from utils.general import (
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 
+label_id_mapping = {
+    'up': '1',
+    'down': '2',
+    'right': '3',
+    'left': '4',
+    'go': '5',
+    '6': '6',
+    '7': '7',
+    '8': '8',
+    '9': '9',
+    '0': '10',
+    'v': '11',
+    'w': '12',
+    'x': '13',
+    'y': '14',
+    'z': '15'
+}
+
+image_seen = {
+    'up': False,
+    'down': False,
+    'right': False,
+    'left': False,
+    'go': False,
+    '6': False,
+    '7': False,
+    '8': False,
+    '9': False,
+    '0': False,
+    'v': False,
+    'w': False,
+    'x': False,
+    'y': False,
+    'z': False
+}
+
+detected_images = [[]]
+def append_image(img, row_num):
+    if len(detected_images[row_num]) < 3:
+        detected_images[row_num].append(img)
+    else:
+        row_num += 1
+        detected_images.append([])
+        detected_images[row_num].append(img)
+    return row_num
+
+
+# need to confirm on communication protocol later
+def convert_to_message(label):
+    prefix = ''
+    label = prefix + label
+    return label.encode()
+
+
 def detect(weights='mdp/weights/weights.pt',
-           source='mdp/input/image_file.jpg',
-           output='mdp/output',
+           source='http://localhost:8008',
            img_size=416,
-           conf_thres=0.7,
+           conf_thres=0.8,
            iou_thres=0.5,
            device='',
-           view_img=False,
-           save_txt=True,
            classes=None,
            agnostic_nms=False,
            augment=False,
            update=False):
+    source += '/stream.mjpg'
 
-    save_img = False
     predicted_label = None
-    out, imgsz = output, img_size
+    imgsz = img_size
     webcam = source.isnumeric() or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # Initialize
     set_logging()
     device = select_device(device)
-    if os.path.exists(out):
-        shutil.rmtree(out)  # delete output folder
-    os.makedirs(out)  # make new output folder
+
     half = device.type != 'cpu'  # half precision only supported on CUDA
 
     # Load model
@@ -59,13 +109,10 @@ def detect(weights='mdp/weights/weights.pt',
         modelc.to(device).eval()
 
     # Set Dataloader
-    vid_path, vid_writer = None, None
     if webcam:
-        view_img = True
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz)
     else:
-        save_img = False
         dataset = LoadImages(source, img_size=imgsz)
 
     # Get names and colors
@@ -73,9 +120,10 @@ def detect(weights='mdp/weights/weights.pt',
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     # Run inference
-    t0 = time.time()
     img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
+
+    row_num = 0
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -84,12 +132,10 @@ def detect(weights='mdp/weights/weights.pt',
             img = img.unsqueeze(0)
 
         # Inference
-        t1 = time_synchronized()
         pred = model(img, augment=augment)[0]
 
         # Apply NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes=classes, agnostic=agnostic_nms)
-        t2 = time_synchronized()
 
         # Apply Classifier
         if classify:
@@ -102,8 +148,6 @@ def detect(weights='mdp/weights/weights.pt',
             else:
                 p, s, im0 = path, '', im0s
 
-            save_path = str(Path(out) / Path(p).name)
-            txt_path = str(Path(out) / Path(p).stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if det is not None and len(det):
@@ -118,32 +162,56 @@ def detect(weights='mdp/weights/weights.pt',
                 # Write results
                 for *xyxy, conf, cls in det:
                     predicted_label = names[int(cls)]
-                    print(predicted_label)
-                    if save_txt:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        with open(txt_path + '.txt', 'a') as f:
-                            f.write(('%g ' * 5 + '\n') % (cls, *xywh))  # label format
+                    if predicted_label:
+                        if not image_seen[predicted_label]:
+                            image_seen[predicted_label] = True
+                            label_id = label_id_mapping.get(predicted_label)
 
-                    if save_img or view_img:  # Add bbox to image
-                        label = '%s %.2f' % (names[int(cls)], conf)
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
-                    break
+                            # r = requests.post(source, json={'label': label_id})  # send result to rpi
+                            # print(r.text)
 
-            # Print time (inference + NMS)
-            print('%sDone. (%.3fs)' % (s, t2 - t1))
+                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                            print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
 
-            # Stream results
-            if view_img:
-                cv2.imshow(p, im0)
-                if cv2.waitKey(1) == ord('q'):  # q to quit
-                    raise StopIteration
+                            label = '%s %.2f' % (label_id, conf)
+                            plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+
+                            #percent by which the image is resized
+                            scale_percent = 50
+                            #calculate the 50 percent of original dimensions
+                            width = int(im0.shape[1] * scale_percent / 100)
+                            height = int(im0.shape[0] * scale_percent / 100)
+                            # dsize
+                            dsize = (width, height)
+                            # resize image
+                            im0 = cv2.resize(im0, dsize)
+
+                            # detected_images.append(im0)
+                            row_num = append_image(im0, row_num)
+
+                            def vconcat_resize_min(im_list, interpolation=cv2.INTER_CUBIC):
+                                w_min = min(im.shape[1] for im in im_list)
+                                im_list_resize = [cv2.resize(im, (w_min, int(im.shape[0] * w_min / im.shape[1])), interpolation=interpolation)
+                                                  for im in im_list]
+                                return cv2.vconcat(im_list_resize)
+
+                            def hconcat_resize_min(im_list, interpolation=cv2.INTER_CUBIC):
+                                h_min = min(im.shape[0] for im in im_list)
+                                im_list_resize = [cv2.resize(im, (int(im.shape[1] * h_min / im.shape[0]), h_min), interpolation=interpolation)
+                                              for im in im_list]
+                                return cv2.hconcat(im_list_resize)
+
+                            def concat_tile_resize(im_list_2d, interpolation=cv2.INTER_CUBIC):
+                                im_list_v = [hconcat_resize_min(im_list_h, interpolation=cv2.INTER_CUBIC) for im_list_h in im_list_2d]
+                                return vconcat_resize_min(im_list_v, interpolation=cv2.INTER_CUBIC)
+
+                            im_tile = concat_tile_resize(detected_images)
+
+                            cv2.imshow('ImageWindow', im_tile)
+                            break
+            if cv2.waitKey(1) == ord('q'):  # q to quit
+                raise StopIteration
 
 
-    if save_txt or save_img:
-        print('Results saved to %s' % Path(out))
-        if platform.system() == 'Darwin' and not update:  # MacOS
-            os.system('open ' + save_path)
-
-    print('Done. (%.3fs)' % (time.time() - t0))
-
-detect(source='http://localhost:8008/stream.mjpg')
+if __name__ == '__main__':
+    detect()
