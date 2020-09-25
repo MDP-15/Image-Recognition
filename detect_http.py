@@ -74,7 +74,7 @@ def convert_to_message(label):
 
 
 def detect(weights='mdp/weights/weights.pt',
-           source='http://localhost:8008',
+           source_address='http://localhost:8008',
            img_size=416,
            conf_thres=0.8,
            iou_thres=0.5,
@@ -83,7 +83,7 @@ def detect(weights='mdp/weights/weights.pt',
            agnostic_nms=False,
            augment=False,
            update=False):
-    source += '/stream.mjpg'
+    source = source_address + '/stream.mjpg'
 
     predicted_label = None
     imgsz = img_size
