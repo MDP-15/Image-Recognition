@@ -66,17 +66,27 @@ def append_image(img, row_num):
     return row_num
 
 
-# need to confirm on communication protocol later
-def convert_to_message(label):
-    prefix = ''
-    label = prefix + label
-    return label.encode()
+def check_bounding_box(xywh):
+    x, y, width, height = xywh
+
+    if height / width < 0.9 or width / height < 0.5:
+        return False
+
+    half_width = width / 2
+    half_height = height / 2
+
+    top_left = (x - half_width, y - half_height)
+    bottom_right = (x + half_width, y + half_height)
+
+    if top_left[0] < 0.04 or bottom_right[0] > 0.96 or top_left[1] < 0.04 or bottom_right[1] > 0.96:
+        return False
+    return True
 
 
 def detect(weights='mdp/weights/weights.pt',
            source_address='http://localhost:8008',
            img_size=416,
-           conf_thres=0.8,
+           conf_thres=0.6,
            iou_thres=0.5,
            device='',
            classes=None,
@@ -164,14 +174,18 @@ def detect(weights='mdp/weights/weights.pt',
                     predicted_label = names[int(cls)]
                     if predicted_label:
                         if not image_seen[predicted_label]:
-                            image_seen[predicted_label] = True
                             label_id = label_id_mapping.get(predicted_label)
+                            if label_id != '1' and conf < 0.72:  # fine tune for up arrow (white)
+                                break
+                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                            if not check_bounding_box(xywh):
+                                break
+
+                            print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
+                            image_seen[predicted_label] = True
 
                             # r = requests.post(source, json={'label': label_id})  # send result to rpi
                             # print(r.text)
-
-                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                            print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
 
                             label = '%s %.2f' % (label_id, conf)
                             plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)

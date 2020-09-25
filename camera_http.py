@@ -59,6 +59,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     cam = cv2.VideoCapture(0)
                     ret, frame = cam.read()
                     result, frame = cv2.imencode('.jpg', frame, encode_param)
+                    frame = cv2.flip(frame, 1)
                     self.wfile.write(b'--FRAME\r\n')
                     self.send_header('Content-Type', 'image/jpeg')
                     self.send_header('Content-Length', str(len(frame)))
