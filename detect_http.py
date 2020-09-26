@@ -191,7 +191,14 @@ def detect(weights='mdp/weights/weights.pt',
                             print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
                             image_seen[predicted_label] = True
 
-                            # r = requests.post(source, json={'label': label_id})  # send result to rpi
+                            # determine image position
+                            x_of_img_center = xywh[0]
+                            pos = 0
+                            if x_of_img_center < 0.333:
+                                pos = -1
+                            if x_of_img_center > 0.666:
+                                pos = 1
+                            # r = requests.post(source, json={'label': label_id, 'pos': pos})  # send result to rpi
                             # print(r.text)
 
                             label = '%s %.2f' % (label_id, conf)
