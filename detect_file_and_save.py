@@ -37,34 +37,6 @@ label_id_mapping = {
     'z': '15'
 }
 
-image_seen = {
-    'up': False,
-    'down': False,
-    'right': False,
-    'left': False,
-    'go': False,
-    '6': False,
-    '7': False,
-    '8': False,
-    '9': False,
-    '0': False,
-    'v': False,
-    'w': False,
-    'x': False,
-    'y': False,
-    'z': False
-}
-
-detected_images = [[]]
-def append_image(img, row_num):
-    if len(detected_images[row_num]) < 3:
-        detected_images[row_num].append(img)
-    else:
-        row_num += 1
-        detected_images.append([])
-        detected_images[row_num].append(img)
-    return row_num
-
 
 def check_bounding_box(xywh,
                        height_to_width_ratio=0.9,
@@ -89,7 +61,8 @@ def check_bounding_box(xywh,
 
 
 def detect(weights='mdp/weights/weights.pt',
-           source_address='http://localhost:8008',
+           source='IMG_4806.MOV',
+           output='mdp/output',
            img_size=416,
            conf_thres=0.6,
            iou_thres=0.5,
@@ -100,16 +73,18 @@ def detect(weights='mdp/weights/weights.pt',
            update=False,
            scale_percent=50,
            real_conf_thresh=0.72):
-    source = source_address + '/stream.mjpg'
 
+    save_img = True
     predicted_label = None
-    imgsz = img_size
+    out, imgsz = output, img_size
     webcam = source.isnumeric() or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # Initialize
     set_logging()
     device = select_device(device)
-
+    if os.path.exists(out):
+        shutil.rmtree(out)  # delete output folder
+    os.makedirs(out)  # make new output folder
     half = device.type != 'cpu'  # half precision only supported on CUDA
 
     # Load model
@@ -126,10 +101,13 @@ def detect(weights='mdp/weights/weights.pt',
         modelc.to(device).eval()
 
     # Set Dataloader
+    vid_path, vid_writer = None, None
     if webcam:
+        view_img = True
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz)
     else:
+        # save_img = True
         dataset = LoadImages(source, img_size=imgsz)
 
     # Get names and colors
@@ -149,10 +127,12 @@ def detect(weights='mdp/weights/weights.pt',
             img = img.unsqueeze(0)
 
         # Inference
+        t1 = time_synchronized()
         pred = model(img, augment=augment)[0]
 
         # Apply NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes=classes, agnostic=agnostic_nms)
+        t2 = time_synchronized()
 
         # Apply Classifier
         if classify:
@@ -165,6 +145,8 @@ def detect(weights='mdp/weights/weights.pt',
             else:
                 p, s, im0 = path, '', im0s
 
+            save_path = str(Path(out) / Path(p).name)
+            txt_path = str(Path(out) / Path(p).stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if det is not None and len(det):
@@ -180,56 +162,46 @@ def detect(weights='mdp/weights/weights.pt',
                 for *xyxy, conf, cls in det:
                     predicted_label = names[int(cls)]
                     if predicted_label:
-                        if not image_seen[predicted_label]:
-                            label_id = label_id_mapping.get(predicted_label)
-                            if label_id != '1' and conf < real_conf_thresh:  # fine tune for up arrow (white)
-                                break
-                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                            if not check_bounding_box(xywh):
-                                break
+                        label_id = label_id_mapping.get(predicted_label)
 
-                            print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
-                            image_seen[predicted_label] = True
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
 
-                            # r = requests.post(source, json={'label': label_id})  # send result to rpi
-                            # print(r.text)
+                        print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
 
-                            label = '%s %.2f' % (label_id, conf)
-                            plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+                        # r = requests.post(source, json={'label': label_id})  # send result to rpi
+                        # print(r.text)
 
-                            #percent by which the image is resized
-                            # scale_percent = 50
-                            #calculate the 50 percent of original dimensions
-                            width = int(im0.shape[1] * scale_percent / 100)
-                            height = int(im0.shape[0] * scale_percent / 100)
-                            # dsize
-                            dsize = (width, height)
-                            # resize image
-                            im0 = cv2.resize(im0, dsize)
-
-                            # detected_images.append(im0)
-                            row_num = append_image(im0, row_num)
-
-                            def vconcat_resize_min(im_list, interpolation=cv2.INTER_CUBIC):
-                                w_min = min(im.shape[1] for im in im_list)
-                                im_list_resize = [cv2.resize(im, (w_min, int(im.shape[0] * w_min / im.shape[1])), interpolation=interpolation)
-                                                  for im in im_list]
-                                return cv2.vconcat(im_list_resize)
-
-                            def hconcat_resize_min(im_list, interpolation=cv2.INTER_CUBIC):
-                                h_min = min(im.shape[0] for im in im_list)
-                                im_list_resize = [cv2.resize(im, (int(im.shape[1] * h_min / im.shape[0]), h_min), interpolation=interpolation)
-                                              for im in im_list]
-                                return cv2.hconcat(im_list_resize)
-
-                            def concat_tile_resize(im_list_2d, interpolation=cv2.INTER_CUBIC):
-                                im_list_v = [hconcat_resize_min(im_list_h, interpolation=cv2.INTER_CUBIC) for im_list_h in im_list_2d]
-                                return vconcat_resize_min(im_list_v, interpolation=cv2.INTER_CUBIC)
-
-                            im_tile = concat_tile_resize(detected_images)
-
-                            cv2.imshow('ImageWindow', im_tile)
+                        if label_id != '1' and conf < real_conf_thresh:  # fine tune for up arrow (white)
+                            # cv2.imshow('ImageWindow', im0)
                             break
+                        if not check_bounding_box(xywh):
+                            # cv2.imshow('ImageWindow', im0)
+                            break
+
+                        label = '%s %.2f' % (label_id, conf)
+                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+
+                        # cv2.imshow('ImageWindow', im0)
+
+                        break
+            # Save results (image with detections)
+            if save_img:
+                if dataset.mode == 'images':
+                    cv2.imwrite(save_path, im0)
+                else:
+                    print('saving')
+                    if vid_path != save_path:  # new video
+                        vid_path = save_path
+                        if isinstance(vid_writer, cv2.VideoWriter):
+                            vid_writer.release()  # release previous video writer
+
+                        fourcc = 'mp4v'  # output video codec
+                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
+                    vid_writer.write(im0)
+
             if cv2.waitKey(1) == ord('q'):  # q to quit
                 raise StopIteration
 

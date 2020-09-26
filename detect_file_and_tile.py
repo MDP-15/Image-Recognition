@@ -89,7 +89,8 @@ def check_bounding_box(xywh,
 
 
 def detect(weights='mdp/weights/weights.pt',
-           source_address='http://localhost:8008',
+           source='IMG_4806.MOV',
+           output='mdp/output',
            img_size=416,
            conf_thres=0.6,
            iou_thres=0.5,
@@ -100,16 +101,18 @@ def detect(weights='mdp/weights/weights.pt',
            update=False,
            scale_percent=50,
            real_conf_thresh=0.72):
-    source = source_address + '/stream.mjpg'
 
+    save_img = False
     predicted_label = None
-    imgsz = img_size
+    out, imgsz = output, img_size
     webcam = source.isnumeric() or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
     # Initialize
     set_logging()
     device = select_device(device)
-
+    if os.path.exists(out):
+        shutil.rmtree(out)  # delete output folder
+    os.makedirs(out)  # make new output folder
     half = device.type != 'cpu'  # half precision only supported on CUDA
 
     # Load model
@@ -126,10 +129,13 @@ def detect(weights='mdp/weights/weights.pt',
         modelc.to(device).eval()
 
     # Set Dataloader
+    vid_path, vid_writer = None, None
     if webcam:
+        view_img = True
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz)
     else:
+        # save_img = True
         dataset = LoadImages(source, img_size=imgsz)
 
     # Get names and colors
@@ -149,10 +155,12 @@ def detect(weights='mdp/weights/weights.pt',
             img = img.unsqueeze(0)
 
         # Inference
+        t1 = time_synchronized()
         pred = model(img, augment=augment)[0]
 
         # Apply NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes=classes, agnostic=agnostic_nms)
+        t2 = time_synchronized()
 
         # Apply Classifier
         if classify:
@@ -165,6 +173,8 @@ def detect(weights='mdp/weights/weights.pt',
             else:
                 p, s, im0 = path, '', im0s
 
+            save_path = str(Path(out) / Path(p).name)
+            txt_path = str(Path(out) / Path(p).stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if det is not None and len(det):
@@ -230,6 +240,23 @@ def detect(weights='mdp/weights/weights.pt',
 
                             cv2.imshow('ImageWindow', im_tile)
                             break
+            # Save results (image with detections)
+            if save_img:
+                if dataset.mode == 'images':
+                    cv2.imwrite(save_path, im0)
+                else:
+                    if vid_path != save_path:  # new video
+                        vid_path = save_path
+                        if isinstance(vid_writer, cv2.VideoWriter):
+                            vid_writer.release()  # release previous video writer
+
+                        fourcc = 'mp4v'  # output video codec
+                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
+                    vid_writer.write(im0)
+
             if cv2.waitKey(1) == ord('q'):  # q to quit
                 raise StopIteration
 
