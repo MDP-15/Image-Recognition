@@ -11,6 +11,8 @@ import torch.backends.cudnn as cudnn
 from numpy import random
 import requests
 
+from conf_thresh import confidence_threshold
+from bounding_box import check_bounding_box
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import (
@@ -38,41 +40,18 @@ label_id_mapping = {
 }
 
 
-def check_bounding_box(xywh,
-                       height_to_width_ratio=0.9,
-                       width_to_height_ratio=0.5,
-                       left_right_edge=0.04,
-                       top_bottom_edge=0.04):
-    x, y, width, height = xywh
-
-    if height / width < height_to_width_ratio or width / height < width_to_height_ratio:
-        return False
-
-    half_width = width / 2
-    half_height = height / 2
-
-    top_left = (x - half_width, y - half_height)
-    bottom_right = (x + half_width, y + half_height)
-
-    if (top_left[0] < left_right_edge or bottom_right[0] > 1 - left_right_edge
-       or top_left[1] < top_bottom_edge or bottom_right[1] > 1 - top_bottom_edge):
-        return False
-    return True
-
-
 def detect(weights='mdp/weights/weights.pt',
-           source='IMG_4806.MOV',
+           source='mdp/videos/recording_Z.avi',
            output='mdp/output',
            img_size=416,
-           conf_thres=0.6,
+           conf_thres=0.01,
            iou_thres=0.5,
            device='',
            classes=None,
            agnostic_nms=False,
            augment=False,
            update=False,
-           scale_percent=50,
-           real_conf_thresh=0.72):
+           scale_percent=50):
 
     save_img = True
     predicted_label = None
@@ -171,14 +150,18 @@ def detect(weights='mdp/weights/weights.pt',
                         # r = requests.post(source, json={'label': label_id})  # send result to rpi
                         # print(r.text)
 
-                        if label_id != '1' and conf < real_conf_thresh:  # fine tune for up arrow (white)
+                        if False and conf < confidence_threshold(label_id):  # fine tune for up arrow (white)
                             # cv2.imshow('ImageWindow', im0)
                             break
-                        if not check_bounding_box(xywh):
-                            # cv2.imshow('ImageWindow', im0)
-                            break
+                        # if not check_bounding_box(xywh):
+                        #     # cv2.imshow('ImageWindow', im0)
+                        #     break
 
                         label = '%s %.2f' % (label_id, conf)
+                        good, text = check_bounding_box(xywh, im0.shape[0], im0.shape[1])
+                        if not good:
+                            label = text
+
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
 
                         # cv2.imshow('ImageWindow', im0)
@@ -189,7 +172,6 @@ def detect(weights='mdp/weights/weights.pt',
                 if dataset.mode == 'images':
                     cv2.imwrite(save_path, im0)
                 else:
-                    print('saving')
                     if vid_path != save_path:  # new video
                         vid_path = save_path
                         if isinstance(vid_writer, cv2.VideoWriter):
@@ -207,4 +189,21 @@ def detect(weights='mdp/weights/weights.pt',
 
 
 if __name__ == '__main__':
+    # videos = ['mdp/videos/recording_0.avi',
+    #           'mdp/videos/recording_6.avi',
+    #           'mdp/videos/recording_7.avi',
+    #           'mdp/videos/recording_8.avi',
+    #           'mdp/videos/recording_9.avi',
+    #           'mdp/videos/recording_down.avi',
+    #           'mdp/videos/recording_go.avi',
+    #           'mdp/videos/recording_left.avi',
+    #           'mdp/videos/recording_right.avi',
+    #           'mdp/videos/recording_up.avi',
+    #           'mdp/videos/recording_V.avi',
+    #           'mdp/videos/recording_W.avi',
+    #           'mdp/videos/recording_X.avi',
+    #           'mdp/videos/recording_Y.avi',
+    #           'mdp/videos/recording_Z.avi']
+    # for video in videos:
+    #     detect(source=video)
     detect()

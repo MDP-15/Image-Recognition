@@ -21,19 +21,21 @@ encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_POST(self):
-        ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
-        if ctype != 'application/json':
-            self.send_response(400)
+        if self.path == '/labels':
+            ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+            if ctype != 'application/json':
+                self.send_response(400)
+                self.end_headers()
+                return
+            length = int(self.headers["Content-Length"])
+            raw_message = self.rfile.read(length)
+            message = json.loads(raw_message)
+            print(message['label'])
+            print(message['pos'])
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
             self.end_headers()
-            return
-        length = int(self.headers["Content-Length"])
-        raw_message = self.rfile.read(length)
-        message = json.loads(raw_message)
-        print(message['label'])
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(bytes(json.dumps({'status': 0}), 'utf-8'))
+            self.wfile.write(bytes(json.dumps({'status': 0}), 'utf-8'))
 
     def do_GET(self):
         if self.path == '/':

@@ -69,7 +69,7 @@ def append_image(img, row_num):
 
 
 def detect(weights='mdp/weights/weights.pt',
-           source_address='http://localhost:8008', #192.168.15.1
+           source_address='http://localhost:8008', # 192.168.15.1
            img_size=416,
            conf_thres=0.01,
            iou_thres=0.5,
@@ -147,6 +147,7 @@ def detect(weights='mdp/weights/weights.pt',
 
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -160,18 +161,14 @@ def detect(weights='mdp/weights/weights.pt',
                 for *xyxy, conf, cls in det:
                     predicted_label = names[int(cls)]
                     if predicted_label:
+                        label_id = label_id_mapping.get(predicted_label)
+                        if conf < confidence_threshold(label_id):  # fine tune for up arrow (white)
+                            break
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+
+                        print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
+
                         if not image_seen[predicted_label]:
-                            label_id = label_id_mapping.get(predicted_label)
-                            if conf < confidence_threshold(label_id):  # fine tune for up arrow (white)
-                                break
-                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                            good, text = check_bounding_box(xywh, im0.shape[0], im0.shape[1])
-                            if not good:
-                                break
-
-                            print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
-                            image_seen[predicted_label] = True
-
                             # determine image position
                             x_of_img_center = xywh[0]
                             pos = 0
@@ -181,43 +178,16 @@ def detect(weights='mdp/weights/weights.pt',
                                 pos = 1
                             r = requests.post(label_server, json={'label': label_id, 'pos': pos})  # send result to rpi
                             print(r.text)
+                            image_seen[predicted_label] = True
 
-                            label = '%s %.2f' % (label_id, conf)
-                            plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+                        label = '%s %.2f' % (label_id, conf)
+                        good, text = check_bounding_box(xywh, im0.shape[0], im0.shape[1])
+                        if not good:
+                            label = text
+                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+                        break
+            cv2.imshow(p, im0)
 
-                            #percent by which the image is resized
-                            # scale_percent = 50
-                            #calculate the 50 percent of original dimensions
-                            width = int(im0.shape[1] * scale_percent / 100)
-                            height = int(im0.shape[0] * scale_percent / 100)
-                            # dsize
-                            dsize = (width, height)
-                            # resize image
-                            im0 = cv2.resize(im0, dsize)
-
-                            # detected_images.append(im0)
-                            row_num = append_image(im0, row_num)
-
-                            def vconcat_resize_min(im_list, interpolation=cv2.INTER_CUBIC):
-                                w_min = min(im.shape[1] for im in im_list)
-                                im_list_resize = [cv2.resize(im, (w_min, int(im.shape[0] * w_min / im.shape[1])), interpolation=interpolation)
-                                                  for im in im_list]
-                                return cv2.vconcat(im_list_resize)
-
-                            def hconcat_resize_min(im_list, interpolation=cv2.INTER_CUBIC):
-                                h_min = min(im.shape[0] for im in im_list)
-                                im_list_resize = [cv2.resize(im, (int(im.shape[1] * h_min / im.shape[0]), h_min), interpolation=interpolation)
-                                              for im in im_list]
-                                return cv2.hconcat(im_list_resize)
-
-                            def concat_tile_resize(im_list_2d, interpolation=cv2.INTER_CUBIC):
-                                im_list_v = [hconcat_resize_min(im_list_h, interpolation=cv2.INTER_CUBIC) for im_list_h in im_list_2d]
-                                return vconcat_resize_min(im_list_v, interpolation=cv2.INTER_CUBIC)
-
-                            im_tile = concat_tile_resize(detected_images)
-
-                            cv2.imshow('ImageWindow', im_tile)
-                            break
             if cv2.waitKey(1) == ord('q'):  # q to quit
                 raise StopIteration
 

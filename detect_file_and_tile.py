@@ -11,6 +11,8 @@ import torch.backends.cudnn as cudnn
 from numpy import random
 import requests
 
+from conf_thresh import confidence_threshold
+from bounding_box import check_bounding_box
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import (
@@ -66,41 +68,18 @@ def append_image(img, row_num):
     return row_num
 
 
-def check_bounding_box(xywh,
-                       height_to_width_ratio=0.9,
-                       width_to_height_ratio=0.5,
-                       left_right_edge=0.04,
-                       top_bottom_edge=0.04):
-    x, y, width, height = xywh
-
-    if height / width < height_to_width_ratio or width / height < width_to_height_ratio:
-        return False
-
-    half_width = width / 2
-    half_height = height / 2
-
-    top_left = (x - half_width, y - half_height)
-    bottom_right = (x + half_width, y + half_height)
-
-    if (top_left[0] < left_right_edge or bottom_right[0] > 1 - left_right_edge
-       or top_left[1] < top_bottom_edge or bottom_right[1] > 1 - top_bottom_edge):
-        return False
-    return True
-
-
 def detect(weights='mdp/weights/weights.pt',
-           source='IMG_4806.MOV',
+           source='mdp/videos/recording_left.avi',
            output='mdp/output',
            img_size=416,
-           conf_thres=0.6,
+           conf_thres=0.01,
            iou_thres=0.5,
            device='',
            classes=None,
            agnostic_nms=False,
            augment=False,
            update=False,
-           scale_percent=50,
-           real_conf_thresh=0.72):
+           scale_percent=50):
 
     save_img = False
     predicted_label = None
@@ -192,10 +171,11 @@ def detect(weights='mdp/weights/weights.pt',
                     if predicted_label:
                         if not image_seen[predicted_label]:
                             label_id = label_id_mapping.get(predicted_label)
-                            if label_id != '1' and conf < real_conf_thresh:  # fine tune for up arrow (white)
+                            if conf < confidence_threshold(label_id):  # fine tune for up arrow (white)
                                 break
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                            if not check_bounding_box(xywh):
+                            good, text = check_bounding_box(xywh, im0.shape[0], im0.shape[1])
+                            if not good:
                                 break
 
                             print(('%s ' * 5 + '\n') % (label_id, *xywh))  # label format
@@ -240,22 +220,6 @@ def detect(weights='mdp/weights/weights.pt',
 
                             cv2.imshow('ImageWindow', im_tile)
                             break
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'images':
-                    cv2.imwrite(save_path, im0)
-                else:
-                    if vid_path != save_path:  # new video
-                        vid_path = save_path
-                        if isinstance(vid_writer, cv2.VideoWriter):
-                            vid_writer.release()  # release previous video writer
-
-                        fourcc = 'mp4v'  # output video codec
-                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
-                    vid_writer.write(im0)
 
             if cv2.waitKey(1) == ord('q'):  # q to quit
                 raise StopIteration
