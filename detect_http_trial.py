@@ -170,13 +170,8 @@ def detect(weights='mdp/weights/weights.pt',
 
                         if not image_seen[predicted_label]:
                             # determine image position
-                            x_of_img_center = xywh[0]
-                            pos = 0
-                            if x_of_img_center < 0.333:
-                                pos = -1
-                            if x_of_img_center > 0.666:
-                                pos = 1
-                            r = requests.post(label_server, json={'label': label_id, 'pos': pos})  # send result to rpi
+                            x, y, w, h = xywh
+                            r = requests.post(label_server, json={'label': label_id, 'x': x, 'y': y})  # send result to rpi
                             print(r.text)
                             image_seen[predicted_label] = True
 
