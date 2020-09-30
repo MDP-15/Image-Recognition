@@ -162,7 +162,7 @@ def detect(weights='mdp/weights/weights.pt',
                     predicted_label = names[int(cls)]
                     if predicted_label:
                         label_id = label_id_mapping.get(predicted_label)
-                        if conf < confidence_threshold(label_id):  # fine tune for up arrow (white)
+                        if False and conf < confidence_threshold(label_id):  # fine tune for up arrow (white)
                             break
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
 
@@ -171,13 +171,14 @@ def detect(weights='mdp/weights/weights.pt',
                         if not image_seen[predicted_label]:
                             # determine image position
                             x, y, w, h = xywh
-                            r = requests.post(label_server, json={'label': label_id, 'x': x, 'y': y})  # send result to rpi
-                            print(r.text)
+                            # r = requests.post(label_server, json={'label': label_id, 'x': x, 'y': y})  # send result to rpi
+                            # print(r.text)
                             image_seen[predicted_label] = True
 
                         label = '%s %.2f' % (label_id, conf)
                         good, text = check_bounding_box(xywh, im0.shape[0], im0.shape[1])
                         if not good:
+                            break
                             label = text
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
                         break

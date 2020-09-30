@@ -41,7 +41,7 @@ label_id_mapping = {
 
 
 def detect(weights='mdp/weights/weights.pt',
-           source='mdp/videos/recording_Z.avi',
+           source='mdp/videos',
            output='mdp/output',
            img_size=416,
            conf_thres=0.01,
