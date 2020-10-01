@@ -212,6 +212,7 @@ def detect(weights='mdp/weights/weights.pt',
                             im_tile = concat_tile_resize(detected_images)
 
                             cv2.imshow('ImageWindow', im_tile)
+                            cv2.imwrite('result.png', im_tile)
                             break
             if cv2.waitKey(1) == ord('q'):  # q to quit
                 raise StopIteration
