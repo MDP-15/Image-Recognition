@@ -69,7 +69,7 @@ def append_image(img, row_num):
 
 
 def detect(weights='mdp/weights/weights.pt',
-           source_address='http://localhost:8008', #192.168.15.1
+           source_address='http://192.168.15.1:8008',
            img_size=416,
            conf_thres=0.01,
            iou_thres=0.5,
@@ -80,7 +80,7 @@ def detect(weights='mdp/weights/weights.pt',
            update=False,
            scale_percent=50):
     source = source_address + '/stream.mjpg'
-    label_server = source_address + '/labels'
+    # label_server = source_address + '/labels'
 
     predicted_label = None
     imgsz = img_size
@@ -174,8 +174,8 @@ def detect(weights='mdp/weights/weights.pt',
 
                             # determine image position
                             x, y, w, h = xywh
-                            r = requests.post(label_server, json={'label': label_id, 'x': x, 'y': y})  # send result to rpi
-                            print(r.text)
+                            # r = requests.post(label_server, json={'label': label_id, 'x': x, 'y': y})  # send result to rpi
+                            # print(r.text)
 
                             label = '%s %.2f' % (label_id, conf)
                             plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
