@@ -73,23 +73,34 @@ def append_image(img, row_num):
 
 
 def receive_frame(data, payload_size, conn):
+    # image
     while len(data) < payload_size:
-        print("Recv: {}".format(len(data)))
         data += conn.recv(4096)
-
-    print("Done Recv: {}".format(len(data)))
     packed_msg_size = data[:payload_size]
     data = data[payload_size:]
     msg_size = struct.unpack(">L", packed_msg_size)[0]
-    print("msg_size: {}".format(msg_size))
     while len(data) < msg_size:
         data += conn.recv(4096)
     frame_data = data[:msg_size]
     data = data[msg_size:]
+    # coordinates
+    while len(data) < payload_size:
+        data += conn.recv(4096)
+    packed_msg_size = data[:payload_size]
+    data = data[payload_size:]
+    msg_size = struct.unpack(">L", packed_msg_size)[0]
+    while len(data) < msg_size:
+        data += conn.recv(4096)
+    coor_data = data[:msg_size]
+    data = data[msg_size:]
+
 
     frame = pickle.loads(frame_data, fix_imports=True, encoding="bytes")
     frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
-    return frame, data
+
+    coor = pickle.loads(coor_data, fix_imports=True, encoding="bytes")
+    coor = json.loads(coor)
+    return frame, coor, data
 
 
 # need to confirm on communication protocol later
@@ -112,6 +123,9 @@ def detect(weights='mdp/weights/weights.pt',
     # Initialize
     set_logging()
     device = select_device(device)
+    csvfile = open('predictions.csv', 'a+')
+    csvfile.write('robot_x,robot_y,robot_dir,img_label,img_x,img_y\n')
+    csvfile.close()
 
     model = attempt_load(weights, map_location=device)
     imgsz = check_img_size(img_size, s=model.stride.max())
@@ -120,18 +134,18 @@ def detect(weights='mdp/weights/weights.pt',
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     # tcp connection
-    HOST = ''
-    PORT = 8080
-    s_algo = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    print('Socket created')
-    s_algo.bind((HOST, PORT))
-    print('Socket bind complete')
-    s_algo.listen(10)
-    print('Socket now listening')
-    conn_algo, addr_algo = s_algo.accept()
+    # HOST = ''
+    # PORT = 8080
+    # s_algo = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    # print('Socket created')
+    # s_algo.bind((HOST, PORT))
+    # print('Socket bind complete')
+    # s_algo.listen(10)
+    # print('Socket now listening')
+    # conn_algo, addr_algo = s_algo.accept()
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('192.168.15.1', 8008))
+    client_socket.connect(('192.168.15.1', 8008)) # 192.168.15.1
     connection = client_socket.makefile('wb')
     conn_rpi = client_socket
 
@@ -151,8 +165,8 @@ def detect(weights='mdp/weights/weights.pt',
 
     row_num = 0
     while True:
-        frame, data = receive_frame(data, payload_size, conn_rpi)
-        print("Received picture")
+        frame, coor, data = receive_frame(data, payload_size, conn_rpi)
+        print("Received picture at {}, {} facing {}".format(coor['x'], coor['y'], coor['dir']))
 
         img = [frame]
         img0 = img.copy()
@@ -216,7 +230,11 @@ def detect(weights='mdp/weights/weights.pt',
 
                             # determine image position
                             x, y, w, h = xywh
-                            conn_algo.sendall(bytes(json.dumps({'label': label_id, 'x': x, 'y': y}), 'utf-8'))  # send result to algo
+                            # conn_algo.sendall(bytes(json.dumps({'label': label_id, 'x': x, 'y': y}), 'utf-8'))  # send result to algo
+                            print(json.dumps({'label': label_id, 'x': x, 'y': y}))
+                            csvfile = open('predictions.csv', 'a+')
+                            csvfile.write('{},{},{},{},{},{}\n'.format(coor['x'],coor['y'],coor['dir'],label_id,x,y))
+                            csvfile.close()
 
                             label = '%s %.2f' % (label_id, conf)
                             plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
