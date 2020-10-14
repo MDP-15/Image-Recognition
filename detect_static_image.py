@@ -119,11 +119,11 @@ def detect(weights='mdp/weights/weights.pt',
            agnostic_nms=False,
            augment=False,
            update=False,
-           scale_percent=50):
+           scale_percent=100):
     # Initialize
     set_logging()
     device = select_device(device)
-    csvfile = open('predictions.csv', 'a+')
+    csvfile = open('predictions.csv', 'w+')
     csvfile.write('robot_x,robot_y,robot_dir,img_label,img_x,img_y\n')
     csvfile.close()
 
@@ -166,7 +166,7 @@ def detect(weights='mdp/weights/weights.pt',
     row_num = 0
     while True:
         frame, coor, data = receive_frame(data, payload_size, conn_rpi)
-        print("Received picture at {}, {} facing {}".format(coor['x'], coor['y'], coor['dir']))
+        print("Received picture at {}, {} facing {}".format(coor['X'], coor['Y'], coor['O']))
 
         img = [frame]
         img0 = img.copy()
@@ -233,7 +233,7 @@ def detect(weights='mdp/weights/weights.pt',
                             # conn_algo.sendall(bytes(json.dumps({'label': label_id, 'x': x, 'y': y}), 'utf-8'))  # send result to algo
                             print(json.dumps({'label': label_id, 'x': x, 'y': y}))
                             csvfile = open('predictions.csv', 'a+')
-                            csvfile.write('{},{},{},{},{},{}\n'.format(coor['x'],coor['y'],coor['dir'],label_id,x,y))
+                            csvfile.write('{},{},{},{},{},{}\n'.format(coor['X'],coor['Y'],coor['O'],label_id,x,y))
                             csvfile.close()
 
                             label = '%s %.2f' % (label_id, conf)
