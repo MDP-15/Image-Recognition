@@ -3,9 +3,13 @@ def check_bounding_box(xywh,
                        frame_width,
                        height_to_width_ratio=0.6,
                        width_to_height_ratio=0.6,
-                       left_right_edge=10,
-                       top_bottom_edge=10):
+                       left_right_edge=0,
+                       top_bottom_edge=0,
+                       min_height=0.15):
     x, y, width, height = xywh
+
+    if height < min_height or width * 1.333 < min_height:
+        return False, 'size'
 
     height_to_width_ratio = height_to_width_ratio / frame_height * frame_width
     width_to_height_ratio = width_to_height_ratio / frame_width * frame_height
