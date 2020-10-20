@@ -5,7 +5,7 @@ def check_bounding_box(xywh,
                        width_to_height_ratio=0.6,
                        left_right_edge=0,
                        top_bottom_edge=0,
-                       min_height=0.15):
+                       min_height=0.13):
     x, y, width, height = xywh
 
     if height < min_height or width * 1.333 < min_height:
