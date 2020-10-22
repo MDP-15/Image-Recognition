@@ -127,6 +127,10 @@ def detect(weights='mdp/weights/weights.pt',
     csvfile.write('robot_x,robot_y,robot_dir,img_label,img_x,img_y\n')
     csvfile.close()
 
+    imgstr = open('image_string.txt', 'w+')
+    imgstr.write(' ')
+    imgstr.close()
+
     model = attempt_load(weights, map_location=device)
     imgsz = check_img_size(img_size, s=model.stride.max())
 
@@ -235,6 +239,19 @@ def detect(weights='mdp/weights/weights.pt',
                             csvfile = open('predictions.csv', 'a+')
                             csvfile.write('{},{},{},{},{},{}\n'.format(coor['X'],coor['Y'],coor['O'],label_id,x,y))
                             csvfile.close()
+
+                            imgstr = open('image_string.txt', 'a+')
+                            str_x, str_y = coor['X'], coor['Y']
+                            if coor['O'] == 'Right':
+                                str_y -= 2
+                            elif coor['O'] == 'Up':
+                                str_x += 2
+                            elif coor['O'] == 'Left':
+                                str_y += 2
+                            elif coor['O'] == 'Down':
+                                str_x -= 2
+                            imgstr.write('({}, {}, {}), '.format(label_id, str_x, str_y))
+                            imgstr.close()
 
                             label = '%s %.2f' % (label_id, conf)
                             plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
