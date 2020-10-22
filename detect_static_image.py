@@ -242,6 +242,7 @@ def detect(weights='mdp/weights/weights.pt',
 
                             imgstr = open('image_string.txt', 'a+')
                             str_x, str_y = coor['X'], coor['Y']
+                            str_x, str_y = str_y, 19 - str_x
                             if coor['O'] == 'Right':
                                 str_y -= 2
                             elif coor['O'] == 'Up':
