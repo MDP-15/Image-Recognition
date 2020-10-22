@@ -166,7 +166,7 @@ def detect(weights='mdp/weights/weights.pt',
     row_num = 0
     while True:
         frame, coor, data = receive_frame(data, payload_size, conn_rpi)
-        print("Received picture at {}, {} facing {}".format(coor['X'], coor['Y'], coor['O']))
+        # print("Received picture at {}, {} facing {}".format(coor['X'], coor['Y'], coor['O']))
 
         img = [frame]
         img0 = img.copy()
